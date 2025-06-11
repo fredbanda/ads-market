@@ -1,0 +1,8 @@
+en:
+  users:
+    new:
+      title: Register for AdsMarket
+      register: Register
+    create:
+      welcome: "Welcome to AdsMarket %{name}"
+     

@@ -1,10 +1,14 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title><%= content_for(:title) || "Ads Market" %></title>
+    <title><%= title %></title>
+    <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
+    <meta name="keywords" content="ads-market, ads, marketplace, advertising, ad, marketing, promotion, advertisement, ad network, ad networks, ads network, ads networks, advertisers, advertising networks, advertising network, marketing network, marketing networks, market network, market networks, network, networks, networking, networks, social media, social networks, social network, social networks, social media network, social media networks">
+    <meta name="description" content="Ads Market is a platform for advertisers to create and manage their own ad campaigns. It allows advertisers to target specific audiences and track their ad performance. It also provides a marketplace for advertisers to find and connect with other advertisers.">
+    <meta name="author" content="Eunny Technologies">
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
 
@@ -23,6 +27,7 @@
   </head>
 
   <body>
+    <%= render "shared/flash-messages" %>
     <%= yield %>
   </body>
 </html>
