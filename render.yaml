@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: market-link
+    name: adds-market
     env: ruby
     plan: free
     numInstances: 1
