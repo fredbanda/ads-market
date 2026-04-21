@@ -1,0 +1,107 @@
+name: eTriage Generated Pipeline
+'on':
+  push:
+    branches:
+    - main
+  pull_request:
+    branches:
+    - main
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  SERVICE_NAME: ${{ secrets.SERVICE_NAME }}
+  RAILS_ENV: ${{ secrets.RAILS_ENV }}
+  NODE_ENV: ${{ secrets.NODE_ENV }}
+  DATABASE_URL: ${{ secrets.DATABASE_URL }}
+  SECRET_KEY_BASE: ${{ secrets.SECRET_KEY_BASE }}
+  RAILS_MASTER_KEY: ${{ secrets.RAILS_MASTER_KEY }}
+  GCP_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
+  ETRIAGE_WEBHOOK_URL: ${{ secrets.ETRIAGE_WEBHOOK_URL }}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up runtime
+      uses: actions/checkout@v4
+    - name: Build project
+      run: 'bundle install --jobs=4 --retry=3
+
+        npm install --production=false'
+  test:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+    - uses: actions/checkout@v4
+    - name: Run tests
+      run: 'bundle exec rspec spec/ --format documentation
+
+        npm test'
+  lint:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+    - uses: actions/checkout@v4
+    - name: Run linter
+      run: 'bundle exec rubocop --parallel
+
+        npx eslint . --ext .js,.jsx'
+  security_scan:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+    - uses: actions/checkout@v4
+    - name: Security scan
+      run: 'bundle exec bundle-audit check --update
+
+        npm audit --audit-level=moderate
+
+        docker scan $IMAGE_NAME || true'
+  deploy:
+    runs-on: ubuntu-latest
+    needs:
+    - test
+    - lint
+    - security_scan
+    if: github.ref == 'refs/heads/main'
+    steps:
+    - uses: actions/checkout@v4
+    - name: Authenticate to GCP
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.7.0
+    - name: Terraform Init
+      run: terraform init
+      working-directory: ./terraform
+    - name: Terraform Plan
+      run: terraform plan -out=tfplan
+      working-directory: ./terraform
+    - name: Terraform Apply
+      run: terraform apply -auto-approve tfplan
+      working-directory: ./terraform
+      if: github.ref == 'refs/heads/main'
+    - name: Run app deploy commands
+      if: success()
+      run: 'gcloud builds submit --tag gcr.io/$GCP_PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA
+
+        gcloud run deploy $SERVICE_NAME --image gcr.io/$GCP_PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA
+        --platform managed --region us-central1 --allow-unauthenticated --set-env-vars="RAILS_ENV=production,NODE_ENV=production"'
+    - name: Notify eTriage on failure
+      if: failure()
+      run: 'curl -X POST ${{ secrets.ETRIAGE_WEBHOOK_URL }}/api/v1/deploy/workflow-status
+        -H ''Content-Type: application/json'' -d ''{"pipeline_id":"${{ github.run_id
+        }}","job_id":"deploy","error_type":"deploy_failure","logs":"Deploy failed
+        on ${{ github.sha }}","source":"github_actions"}'''
+  monitor:
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: always()
+    steps:
+    - name: Report status to eTriage
+      run: 'curl -X POST ${{ secrets.ETRIAGE_WEBHOOK_URL }}/api/v1/deploy/workflow-status
+        -H ''Content-Type: application/json'' -d ''{"pipeline_id":"${{ github.run_id
+        }}","job_id":"monitor","error_type":"pipeline_complete","logs":"Pipeline finished:
+        ${{ job.status }}","source":"github_actions"}'''
